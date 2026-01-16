@@ -1,87 +1,71 @@
-# 02_02 CircleCI
+# CircleCI CI/CD Lab — AWS Serverless Deploy
 
-## Recommended Resources
-- [CircleCI Quickstart guide](https://circleci.com/docs/getting-started/)
+This repository is a hands-on CI/CD lab built while following the **LinkedIn Learning** course section **02_02 CircleCI**.  
+Goal: implement a working CircleCI pipeline that builds and deploys a sample application to **AWS (serverless/Lambda)** using infrastructure outputs from **CloudFormation**.
 
-## Prerequisites
-Having the following items in place before starting this lab will help you have a smooth experience.
+---
 
-1. A [GitHub account](https://github.com/join) is required to host the code for the sample application. *NOTE: You may need to be an admin for any repositories you want to integrate with CircleCI.*
-2. A [CircleCI account](https://circleci.com/signup/). CircleCI supports GitHub, Bitbucket, and GitLab projects.  This lab focuses on the GitHub integration.
-3. An [Amazon Web Services account](https://aws.amazon.com/free) is needed to deploy and host the sample application used for the deployment target.
-4. The sample application should be in place before starting.  See [00_06 About the Exercise Files](../../ch0_introduction/00_06_about_the_exercise_files/README.md) for steps to deploy the sample application.
-5. The exercise files for the course should be downloaded and accessible on your local system.
+## What this project demonstrates
 
-## Create a GitHub repo for the sample application code
-Because this course covers multiple tools, a dedicated repo is need for each tool to prevent unexpected deployments to the sample-application.
+- ✅ A real **CircleCI pipeline** with jobs + workflows
+- ✅ **Environment-based deployments** (staging / production pattern)
+- ✅ **Secure secrets handling** using CircleCI **Project Environment Variables**
+- ✅ Deployment automation to **AWS Lambda** via **AWS CLI**
+- ✅ Troubleshooting and fixing common CI/CD issues (credentials + variable naming)
 
-1. Create a new GitHub repo. Give the repo a name and description.  Please select **Public** for the repo visibility to simplify access.  Select the option to add a README file and select **Python** when adding a `.gitignore` file.
-2. From the repo home page, select **Add file -> Upload files**.
-3. Select **choose your files** and browse to the exercise files for this lesson on your local system.
-4. Select all of the files and then select **Open**.
-5. After the files have been uploaded, enter a commit message and select **Commit changes**.
+---
 
-## Relocate the CircleCI configuration file in the repo
-*NOTE: THIS IS A KEY STEP TO GET THE CIRCLECI CONFIGURATION WORKING.*
+## Pipeline overview
 
-The CircleCI configuration file, [config.yml](./config.yml), needs to be located inside the repo in a hidden directory named `.circleci`.  This step provides directions for getting the file in place.
+CircleCI runs an automated workflow that:
 
-1. From the root of your repo, select the file `config.yml`.
-2. Begin editing the file by selecting the pencil icon on the top right of the file listing or by typing `e` on your keyboard.
-3. In the filename field, type `.circleci/`.  This will create the `.circleci` directory and place `config.yml` inside the directory.  See the images below for clarification.
+1. Checks out the repository
+2. Runs build/test steps (if present)
+3. Deploys to AWS using a Makefile target:
+   - `make deploy FUNCTION=$STAGING_FUNCTION_NAME PLATFORM="CircleCI" VERSION=$CIRCLE_SHA1 BUILD_NUMBER=$CIRCLE_BUILD_NUM`
 
-    Before adding the `.circleci` directory:
-    ![Before adding the `.circleci` directory](./CircleCI-config-before-SCR-20230917-otkq.png)
+---
 
-    After adding the `.circleci` directory:
-    ![After adding the `.circleci` directory](./CircleCI-config-after-SCR-20230917-ouax.png)
+## Required CircleCI Environment Variables
 
-4. Select **Commit changes...**.  On the dialog that appears, select **Commit changes**.
+Set these in:  
+**CircleCI → Project Settings → Environment Variables**
 
-## Repo connection, and project parameters
-### 1. Set up your CircleCI account
-With your CircleCI account in place, set up a connection to the repo where the exercise files are stored and then set up the project parameters.
+### AWS Authentication (required)
+These must match AWS CLI expected names exactly:
 
-### 2. Repo connection and project parameters
-#### 2.1 Connect to GitHub repo
-1. Log into your CircleCI account and, from the menu on the left-hand side of the page, select **Projects**.
-2. Locate the repo you created to store the exercise files and select the **Set Up Project** button next to it.  *Note: If you've already set up the project, select the three dots next to "Unfollow Project" and select **Project Settings**. Proceed to **Configure project parameters** below).*
-3. Confirm that "Fastest: Use the .circleci/config.yml in my repo" is selected.  In the "From which branch" field, enter **main**.  The display should display a check mark and the message "`.circleci/config.yml` found on this branch".  Select **Set Up Project**.
-4. A build will start running immediately.  The `integration` job may fun successfully but the `deploy-test-staging` job will fail because the parameters for the project (specifically the AWS credentials for the service account) have not been put in place.  You'll take care of that in the next step.
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+- `AWS_DEFAULT_REGION` (or `AWS_REGION`)
+- `AWS_SESSION_TOKEN` (only if you use temporary credentials)
 
-#### 2.2 Configure project parameters
-1. On the page for the failed build, select the button with three dots on the far right and then select **Project Settings**.  Or, from the home page of the project, select the **Project Settings** button on the top, far right of the page.
+### Deployment configuration (required)
+These must match what the pipeline/Makefile expects:
 
-![Project Settings ](CircleCI-Project-Settings-SCR-20230917-ozxw.png)
+- `STAGING_FUNCTION_NAME`
+- `PRODUCTION_FUNCTION_NAME` (if production deploy exists)
+- `STAGING_URL` (if referenced)
+- `PRODUCTION_URL` (if referenced)
 
-2. On the "Project Settings" page, select **Environment Variables**.
-3. For each of the following project parameters, select **Add Environment Variable** and, using the values from the "Outputs" tab of the Cloudformation stack for the sample application, add the names and values for the following project parameters as environment variables.  *Note: CircleCI hides values for all user defined environment variables by default.  Environment variables can not be viewed or edited after they are added.  They must be recreated to be changed or updated.  Also note that variables can be imported from other projects by selecting **Import Variables** and selecting the project containing the variables to be imported.*
+> Values come from the **CloudFormation Stack Outputs** created by the lab.
 
-   - AWS_ACCESS_KEY_ID
-   - AWS_DEFAULT_REGION
-   - AWS_SECRET_ACCESS_KEY
-   - PRODUCTION_FUNCTION_NAME
-   - PRODUCTION_URL
-   - STAGING_FUNCTION_NAME
-   - STAGING_URL
+---
 
-   After all 7 parameters are in place, your configuration should appear as follows:
+## Common issues I fixed during the lab
 
-   ![CircleCI Environment Variables](./CircleCI-Environment-Variables-SCR-20230917-ngsd.png)
+### 1) AWS CLI: “Unable to locate credentials”
+Cause: credentials were set with incorrect variable names (e.g., `AwsAccessKeyId`)  
+Fix: use AWS CLI standard env vars (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, etc.)
 
-### Select a branch and trigger the pipeline
-1. From the homepage of the project, use the dropdown menu after the project name to select the `main` branch. Then select the **Trigger Pipeline** button. Then select the **Trigger Pipeline**.
-2. Select the icon displaying "Running" to view the pipeline in progress.
-3. Allow the build to complete.
-4. If any errors are encountered, review the logs and make corrections as needed.  Consider reviewing the configuration steps for the parameters.  If you are not able to resolve the errors, please post a question on LinkedIn Learning in the course Q&A section.
-5. Open the URLs for the sample application's staging and production environments.  For both environments, confirm that the deployment platform is "CircleCI" and the build number matches the last successful build number. *Note: Because the CircleCI pipeline uses different jobs to deploy the staging and production environments, the build number will be different for each environment.*
+### 2) Lambda deploy: “FunctionName value: 0”
+Cause: `STAGING_FUNCTION_NAME` was missing or empty due to wrong variable naming  
+Fix: set `STAGING_FUNCTION_NAME` exactly (uppercase + underscores)
 
-    ![CircleCI Build Numbers](./CircleCI-Build-Numbers-SCR-20230917-phnu.png)
+---
 
+## How to run locally (optional)
 
-## Additional Information
-- [Starter workflows and sample configurations](https://circleci.com/docs/sample-config/)
-- [AWS CLI orb](https://circleci.com/developer/orbs/orb/circleci/aws-cli#usage-install_aws_cli)
-- TODO: Linkable reference is needed for 'Error messages can be checked via AI ("no code or proprietary data shared")'
+If you have AWS CLI configured locally and the project supports it:
 
-[Next: 02_03 SaaS Tool Summary](../02_03_saas_tool_summary/README.md)
+```bash
+make deploy FUNCTION=<your-lambda-function-name> PLATFORM="local" VERSION="dev" BUILD_NUMBER="0"
